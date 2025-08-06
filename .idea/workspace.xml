@@ -6,7 +6,12 @@
   <component name="ChangeListManager">
     <list default="true" id="3a9f1f68-acde-485d-aa28-d67dfd900e17" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/image_recognition_server/server.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/image_recognition_server/server.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/image_recognition_server/utils/ocr.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/image_recognition_server/utils/ocr.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/image_recognition_server/vision/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/image_recognition_server/vision/anthropic.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/image_recognition_server/vision/openai.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -60,7 +65,7 @@
       <updated>1754443243829</updated>
       <workItem from="1754443244909" duration="2975000" />
       <workItem from="1754446274068" duration="2972000" />
-      <workItem from="1754451700143" duration="4889000" />
+      <workItem from="1754451700143" duration="8458000" />
     </task>
     <servers />
   </component>

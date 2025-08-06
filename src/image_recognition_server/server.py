@@ -31,12 +31,14 @@ logger = logging.getLogger(__name__)
 
 logger.info(f"使用编码: {ENCODING}")
 
-# 导入牛只检测模块（如果依赖已安装）
+
+
+# 导入通用物体检测模块（如果依赖已安装）
 try:
-    from .cattle.detector import get_cattle_detector, DEPS_INSTALLED as CATTLE_DEPS_INSTALLED
+    from .object.detector import get_object_detector, DEPS_INSTALLED as OBJECT_DEPS_INSTALLED
 except ImportError:
-    logger.warning("缺少牛只检测依赖，detect_cattle功能将不可用")
-    CATTLE_DEPS_INSTALLED = False
+    logger.warning("缺少物体检测依赖，detect_objects功能将不可用")
+    OBJECT_DEPS_INSTALLED = False
 
 
 def sanitize_output(text: str) -> str:
@@ -57,67 +59,9 @@ mcp = FastMCP("mcp-image-recognition")
 
 
 
-async def process_image_with_ocr(image_data: str) -> str:
-    """使用OCR处理图像，提取文本内容。
-
-    参数:
-        image_data: Base64编码的图像数据
-
-    返回:
-        str: 从图像中提取的文本
-    """
-    try:
-        # 将base64转换为PIL图像
-        image_bytes = base64.b64decode(image_data)
-        image = Image.open(io.BytesIO(image_bytes))
-
-        # 使用OCR提取文本
-        ocr_text = extract_text_from_image(image, ocr_required=True)
-        
-        if not ocr_text:
-            return "未从图像中检测到任何文本。"
-        
-        return sanitize_output(ocr_text)
-    except OCRError as e:
-        logger.error(f"OCR处理失败: {str(e)}")
-        raise ValueError(f"OCR错误: {str(e)}")
-    except Exception as e:
-        logger.error(f"OCR过程中发生意外错误: {str(e)}")
-        raise
 
 
-@mcp.tool()
-async def describe_image(
-    image: str
-) -> str:
-    """从图像中提取文本内容。
 
-    参数:
-        image: Base64编码的图像数据
-
-    返回:
-        str: 从图像中提取的文本
-    """
-    try:
-        logger.info("处理OCR文本提取请求")
-        logger.debug(f"图像数据长度: {len(image)}")
-
-        # 验证图像数据
-        if not validate_base64_image(image):
-            raise ValueError("无效的base64图像数据")
-
-        result = await process_image_with_ocr(image)
-        if not result:
-            return "未从图像中检测到任何文本。"
-
-        logger.info("成功从图像中提取文本")
-        return result
-    except ValueError as e:
-        logger.error(f"输入错误: {str(e)}")
-        raise
-    except Exception as e:
-        logger.error(f"提取文本时出错: {str(e)}", exc_info=True)
-        raise
 
 
 @mcp.tool()
@@ -151,16 +95,23 @@ async def describe_image_from_url(
         logger.info("成功从URL下载图像")
         logger.debug(f"Base64数据长度: {len(image_data)}")
 
-        # 使用describe_image工具
-        result = await describe_image(image=image_data)
-
+        # 处理图像OCR
+        # 将base64转换为PIL图像
+        image_bytes = base64.b64decode(image_data)
+        image = Image.open(io.BytesIO(image_bytes))
+        
+        # 使用OCR提取文本
+        result = extract_text_from_image(image, ocr_required=True)
         if not result:
             return "未从图像中检测到任何文本。"
 
-        return result
+        return sanitize_output(result)
     except ValueError as e:
         logger.error(f"输入错误: {str(e)}")
         raise
+    except OCRError as e:
+        logger.error(f"OCR处理失败: {str(e)}")
+        raise ValueError(f"OCR错误: {str(e)}")
     except requests.RequestException as e:
         logger.error(f"URL请求错误: {str(e)}")
         raise ValueError(f"URL请求错误: {str(e)}")
@@ -169,21 +120,25 @@ async def describe_image_from_url(
         raise
 
 
+
+
+
 @mcp.tool()
-async def detect_cattle(
-    url: str, confidence: float = 0.25, iou_threshold: float = 0.5
+async def detect_objects(
+    url: str, class_filter: str = "", confidence: float = 0.25, iou_threshold: float = 0.5
 ) -> str:
-    """从URL检测图像中的牛只。
+    """从URL检测图像中的物体。
 
     参数:
         url: 图像的URL地址
+        class_filter: 可选，用逗号分隔的类别名称列表，如"person,car,dog"，留空则检测所有支持的物体
         confidence: 检测置信度阈值，默认0.25
         iou_threshold: NMS的IoU阈值，默认0.5
 
     返回:
         str: JSON格式的检测结果
     """
-    if not CATTLE_DEPS_INSTALLED:
+    if not OBJECT_DEPS_INSTALLED:
         return sanitize_output(json.dumps({
             "error": "缺少依赖项: supervision 或 ultralytics。请安装依赖: pip install supervision ultralytics opencv-python"
         }, ensure_ascii=False))
@@ -203,8 +158,8 @@ async def detect_cattle(
         except Exception as e:
             raise ValueError(f"无法从URL加载图像: {str(e)}")
 
-        # 获取牛只检测器实例
-        detector = get_cattle_detector()
+        # 获取物体检测器实例
+        detector = get_object_detector()
 
         # 解码图像
         image_bytes = base64.b64decode(image_data)
@@ -213,9 +168,15 @@ async def detect_cattle(
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
+        # 处理类别过滤器
+        class_filter_list = None
+        if class_filter:
+            class_filter_list = [c.strip() for c in class_filter.split(",") if c.strip()]
+            logger.info(f"应用类别过滤器: {class_filter_list}")
+
         # 执行检测
-        logger.info(f"执行牛只检测，置信度阈值: {confidence}, IoU阈值: {iou_threshold}")
-        results = detector.detect(img, confidence=confidence, iou_threshold=iou_threshold)
+        logger.info(f"执行物体检测，置信度阈值: {confidence}, IoU阈值: {iou_threshold}")
+        results = detector.detect(img, class_filter=class_filter_list, confidence=confidence, iou_threshold=iou_threshold)
 
         # 返回JSON格式的结果
         result_json = {
@@ -223,7 +184,7 @@ async def detect_cattle(
             "detections": results
         }
         
-        logger.info(f"检测到 {len(results)} 头牛")
+        logger.info(f"检测到 {len(results)} 个物体")
         return sanitize_output(json.dumps(result_json, ensure_ascii=False))
 
     except requests.RequestException as e:
@@ -233,10 +194,44 @@ async def detect_cattle(
         logger.error(f"输入错误: {str(e)}")
         return sanitize_output(json.dumps({"error": f"输入错误: {str(e)}"}, ensure_ascii=False))
     except Exception as e:
-        logger.error(f"检测牛只时出错: {str(e)}", exc_info=True)
-        return sanitize_output(json.dumps({"error": f"检测牛只时出错: {str(e)}"}, ensure_ascii=False))
+        logger.error(f"检测物体时出错: {str(e)}", exc_info=True)
+        return sanitize_output(json.dumps({"error": f"检测物体时出错: {str(e)}"}, ensure_ascii=False))
 
 
+@mcp.tool()
+async def get_supported_classes() -> str:
+    """获取物体检测器支持的所有类别。
+
+    返回:
+        str: JSON格式的类别列表
+    """
+    if not OBJECT_DEPS_INSTALLED:
+        return sanitize_output(json.dumps({
+            "error": "缺少依赖项: supervision 或 ultralytics。请安装依赖: pip install supervision ultralytics opencv-python"
+        }, ensure_ascii=False))
+
+    try:
+        # 获取物体检测器实例
+        detector = get_object_detector()
+        
+        # 获取支持的类别
+        class_names = detector.get_supported_classes()
+        
+        # 转换为列表格式，便于前端显示
+        classes_list = [{"id": id, "name": name} for id, name in class_names.items()]
+        
+        # 返回JSON格式的结果
+        result_json = {
+            "count": len(classes_list),
+            "classes": classes_list
+        }
+        
+        logger.info(f"返回 {len(classes_list)} 个支持的类别")
+        return sanitize_output(json.dumps(result_json, ensure_ascii=False))
+    
+    except Exception as e:
+        logger.error(f"获取支持的类别时出错: {str(e)}", exc_info=True)
+        return sanitize_output(json.dumps({"error": f"获取支持的类别时出错: {str(e)}"}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
