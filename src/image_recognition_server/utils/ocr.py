@@ -15,13 +15,14 @@ class OCRError(Exception):
 
 
 def extract_text_from_image(
-    image: Image.Image, ocr_required: bool = False
+    image: Image.Image, ocr_required: bool = False, lang: str = 'chi_sim+eng'
 ) -> Optional[str]:
     """使用Tesseract OCR从图像中提取文本。
 
     参数:
         image: 要处理的PIL图像对象
         ocr_required: 如果为True，OCR失败时抛出错误。如果为False，返回None。
+        lang: 识别语言，默认为'chi_sim+eng'（中文简体+英文）
 
     返回:
         Optional[str]: 如果成功则返回提取的文本，如果Tesseract不可用
@@ -36,8 +37,14 @@ def extract_text_from_image(
             if tesseract_cmd.strip():  # 仅当路径非空时设置
                 pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
-        # 从图像中提取文本
-        text = pytesseract.image_to_string(image)
+        # 从图像中提取文本，支持指定语言
+        # 尝试使用指定语言包，如果失败则回退到默认语言
+        try:
+            text = pytesseract.image_to_string(image, lang=lang)
+            logger.info(f"使用语言包 '{lang}' 进行OCR识别")
+        except pytesseract.TesseractError as e:
+            logger.warning(f"使用语言包 '{lang}' 识别失败: {str(e)}，尝试使用默认语言")
+            text = pytesseract.image_to_string(image)
 
         # 清理并验证结果
         text = text.strip()
